@@ -1,7 +1,7 @@
-version: 2026.232.0520
+version: 2026.240.1943
 postgresql:
     candy:
-        version: 2026.144.1531
+        version: 2026.247.0100
         description: |
             A Docker-compatible PostgreSQL server that self-initializes its cluster and accepts client connections.
             Installs the PostgreSQL server (postgres, initdb, pg_ctl), the psql
@@ -10,7 +10,10 @@ postgresql:
             (/usr/local/bin/postgresql-entrypoint.sh) performs first-run initdb,
             database creation, password handling, and /docker-entrypoint-initdb.d
             processing, then execs the server on a unix socket under ~/.postgresql
-            listening on 127.0.0.1:5432. Every behaviour below is observable: the
+            listening on 127.0.0.1:5432. ROOT-CAPABLE: root-posture boxes re-exec
+            the body under the distro's postgres OS user (runuser) after
+            preparing the declared data/socket dirs — initdb refuses root;
+            uid-1000 boxes are unchanged. Every behaviour below is observable: the
             binaries on disk, the executable entrypoint, and a live server whose
             cluster was initialized and that answers pg_isready. Deploy-scope steps
             stay auth-independent so the scenario holds for every box composing this
@@ -70,7 +73,28 @@ postgresql:
                 POSTGRES_HOST_AUTH_METHOD=${POSTGRES_HOST_AUTH_METHOD:-scram-sha-256}
                 PGDATA=${PGDATA:-$HOME/.postgresql/data}
                 PGDATA="${PGDATA/#~/$HOME}"
-                SOCKET_DIR="$HOME/.postgresql"
+                SOCKET_DIR="${SOCKET_DIR:-$HOME/.postgresql}"
+
+                # Root-capable (named-batch exit 1, plan/crabbox-loop-cutover.md):
+                # root-posture boxes must not initdb as root (initdb refuses).
+                # Prepare the DECLARED data/socket dirs (the volume path is stable
+                # for every box user) and re-exec the whole body under the distro's
+                # postgres OS user (created by the postgresql package). uid-1000
+                # boxes skip this branch unchanged.
+                if [ "$(id -u)" = "0" ]; then
+                    mkdir -p "$PGDATA" "$SOCKET_DIR"
+                    # the home parent (e.g. /root, 750) must be traversable by the
+                    # postgres user — RCA 2026.247.1203: postgres could not reach
+                    # /root/.postgresql.
+                    chmod 755 "$(dirname "$(dirname "$PGDATA")")"
+                    chown -R postgres:postgres "$(dirname "$PGDATA")" "$SOCKET_DIR"
+                    # runuser resets HOME for the target user — pin it so the
+                    # declared PGDATA/SOCKET_DIR stay authoritative (RCA
+                    # 2026.247.1215: sockets landed in the postgres user's home
+                    # and the /root socket check failed).
+                    export HOME PGDATA SOCKET_DIR
+                    exec runuser -u postgres -- "$0"
+                fi
 
                 # Docker-compatible: read password from file
                 if [ -n "${POSTGRES_PASSWORD_FILE:-}" ] && [ -f "$POSTGRES_PASSWORD_FILE" ]; then
@@ -195,6 +219,16 @@ postgresql:
               service:
                 service: postgresql
                 running: true
+            - check: the postgres server NEVER runs as root — the root-capable branch observable effect (B12, fails without the branch — a root box then has no server or a root-user one; uid-1000 boxes run uid 1000, which passes)
+              id: postgresql-not-root
+              exit_status: 0
+              context:
+                - runtime
+              command:
+                command: |
+                  pgrep -x postgres >/dev/null || exit 1
+                  ps -o user= -p "$(pgrep -x postgres | head -1)" | grep -qv '^root$'
+                in_container: true
 
 postgresql-skill:
     skill:
