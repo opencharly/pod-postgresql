@@ -83,7 +83,11 @@ postgresql:
                 # boxes skip this branch unchanged.
                 if [ "$(id -u)" = "0" ]; then
                     mkdir -p "$PGDATA" "$SOCKET_DIR"
-                    chown -R postgres:postgres "$PGDATA" "$SOCKET_DIR"
+                    # the home parent (e.g. /root, 750) must be traversable by the
+                    # postgres user — RCA 2026.247.1203: postgres could not reach
+                    # /root/.postgresql.
+                    chmod 755 "$(dirname "$(dirname "$PGDATA")")"
+                    chown -R postgres:postgres "$(dirname "$PGDATA")" "$SOCKET_DIR"
                     export PGDATA SOCKET_DIR
                     exec runuser -u postgres -- "$0"
                 fi
