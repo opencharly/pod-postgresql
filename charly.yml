@@ -211,7 +211,7 @@ postgresql:
               service:
                 service: postgresql
                 running: true
-            - check: the postgres server NEVER runs as root — the root-capable branch's observable effect (B12: fails without the branch — without it, a root-box server is absent entirely or would run as root; uid-1000 boxes run it as uid 1000, which also passes)
+            - check: the postgres server NEVER runs as root — the root-capable branch's observable effect (B12 — fails without the branch: a root-box server is then absent entirely or would run as root; uid-1000 boxes run it as uid 1000, which also passes)
               id: postgresql-not-root
               exit_status: 0
               context:
