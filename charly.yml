@@ -88,7 +88,11 @@ postgresql:
                     # /root/.postgresql.
                     chmod 755 "$(dirname "$(dirname "$PGDATA")")"
                     chown -R postgres:postgres "$(dirname "$PGDATA")" "$SOCKET_DIR"
-                    export PGDATA SOCKET_DIR
+                    # runuser resets HOME for the target user — pin it so the
+                    # declared PGDATA/SOCKET_DIR stay authoritative (RCA
+                    # 2026.247.1215: sockets landed in the postgres user's home
+                    # and the /root socket check failed).
+                    export HOME PGDATA SOCKET_DIR
                     exec runuser -u postgres -- "$0"
                 fi
 
