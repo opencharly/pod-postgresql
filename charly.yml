@@ -73,7 +73,7 @@ postgresql:
                 POSTGRES_HOST_AUTH_METHOD=${POSTGRES_HOST_AUTH_METHOD:-scram-sha-256}
                 PGDATA=${PGDATA:-$HOME/.postgresql/data}
                 PGDATA="${PGDATA/#~/$HOME}"
-                SOCKET_DIR="$HOME/.postgresql"
+                SOCKET_DIR="${SOCKET_DIR:-$HOME/.postgresql}"
 
                 # Root-capable (named-batch exit 1, plan/crabbox-loop-cutover.md):
                 # root-posture boxes must not initdb as root (initdb refuses).
