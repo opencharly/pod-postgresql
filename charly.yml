@@ -10,7 +10,10 @@ postgresql:
             (/usr/local/bin/postgresql-entrypoint.sh) performs first-run initdb,
             database creation, password handling, and /docker-entrypoint-initdb.d
             processing, then execs the server on a unix socket under ~/.postgresql
-            listening on 127.0.0.1:5432. Every behaviour below is observable: the
+            listening on 127.0.0.1:5432. ROOT-CAPABLE: root-posture boxes re-exec
+            the body under the distro's postgres OS user (runuser) after
+            preparing the declared data/socket dirs — initdb refuses root;
+            uid-1000 boxes are unchanged. Every behaviour below is observable: the
             binaries on disk, the executable entrypoint, and a live server whose
             cluster was initialized and that answers pg_isready. Deploy-scope steps
             stay auth-independent so the scenario holds for every box composing this
@@ -71,6 +74,19 @@ postgresql:
                 PGDATA=${PGDATA:-$HOME/.postgresql/data}
                 PGDATA="${PGDATA/#~/$HOME}"
                 SOCKET_DIR="$HOME/.postgresql"
+
+                # Root-capable (named-batch exit 1, plan/crabbox-loop-cutover.md):
+                # root-posture boxes must not initdb as root (initdb refuses).
+                # Prepare the DECLARED data/socket dirs (the volume path is stable
+                # for every box user) and re-exec the whole body under the distro's
+                # postgres OS user (created by the postgresql package). uid-1000
+                # boxes skip this branch unchanged.
+                if [ "$(id -u)" = "0" ]; then
+                    mkdir -p "$PGDATA" "$SOCKET_DIR"
+                    chown -R postgres:postgres "$PGDATA" "$SOCKET_DIR"
+                    export PGDATA SOCKET_DIR
+                    exec runuser -u postgres -- "$0"
+                fi
 
                 # Docker-compatible: read password from file
                 if [ -n "${POSTGRES_PASSWORD_FILE:-}" ] && [ -f "$POSTGRES_PASSWORD_FILE" ]; then
